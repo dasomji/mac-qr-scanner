@@ -1,4 +1,4 @@
-import { Detail, Action, ActionPanel, getPreferenceValues, Clipboard, showHUD } from "@raycast/api";
+import { Detail, Action, ActionPanel, getPreferenceValues, Clipboard, showHUD, showToast, Toast } from "@raycast/api";
 import { useState, useEffect, useRef } from "react";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -9,11 +9,20 @@ import jsQR from "jsqr";
 
 const execFileAsync = promisify(execFile);
 
+const PREVIEW_WIDTH = 320;
+
 interface Preferences {
   warmupDelay: string;
 }
 
 type ScanStatus = "scanning" | "found" | "error";
+
+interface WifiNetwork {
+  ssid: string;
+  password: string;
+  security: string;
+  hidden: boolean;
+}
 
 function looksLikeUrl(text: string): boolean {
   try {
@@ -22,6 +31,45 @@ function looksLikeUrl(text: string): boolean {
   } catch {
     return false;
   }
+}
+
+function parseWifi(text: string): WifiNetwork | null {
+  if (!text.startsWith("WIFI:")) return null;
+
+  // Strip "WIFI:" prefix and trailing ";;"
+  const body = text.slice(5).replace(/;;\s*$/, "");
+  const params: Record<string, string> = {};
+
+  // Parse key:value pairs separated by ";"
+  // Values may contain escaped semicolons (\;)
+  for (const part of body.split(/(?<!\\);/)) {
+    const colonIdx = part.indexOf(":");
+    if (colonIdx === -1) continue;
+    const key = part.slice(0, colonIdx).toUpperCase();
+    const value = part.slice(colonIdx + 1).replace(/\\(.)/g, "$1");
+    params[key] = value;
+  }
+
+  if (!params.S) return null;
+
+  return {
+    ssid: params.S,
+    password: params.P || "",
+    security: params.T || "nopass",
+    hidden: params.H === "true",
+  };
+}
+
+async function connectToWifi(network: WifiNetwork): Promise<void> {
+  // Find the Wi-Fi interface name
+  const { stdout } = await execFileAsync("/usr/sbin/networksetup", ["-listallhardwareports"]);
+  const match = stdout.match(/Hardware Port: Wi-Fi\nDevice: (\w+)/);
+  const iface = match ? match[1] : "en0";
+
+  const args = ["-setairportnetwork", iface, network.ssid];
+  if (network.password) args.push(network.password);
+
+  await execFileAsync("/usr/sbin/networksetup", args);
 }
 
 async function resolveImagesnap(): Promise<string> {
@@ -64,12 +112,16 @@ export default function Command() {
           }
 
           const fileBuffer = await readFile(tmpFile);
-          setFrameBase64(fileBuffer.toString("base64"));
 
           const image = await Jimp.read(fileBuffer);
           const { data, width, height } = image.bitmap;
           const imageData = new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength);
           const result = jsQR(imageData, width, height);
+
+          // Resize for preview (smaller = faster rendering, fits without scrolling)
+          const preview = image.clone().resize({ w: PREVIEW_WIDTH });
+          const previewBuf = await preview.getBuffer("image/jpeg");
+          setFrameBase64(previewBuf.toString("base64"));
 
           unlink(tmpFile).catch(() => {});
 
@@ -87,7 +139,6 @@ export default function Command() {
           return;
         }
 
-        // After first capture, camera is warm — no delay needed
         delay = "0";
       }
     }
@@ -99,14 +150,34 @@ export default function Command() {
     };
   }, []);
 
-  const markdown = buildMarkdown(status, frameBase64, decoded, errorMessage);
+  const wifi = status === "found" ? parseWifi(decoded) : null;
+  const isUrl = status === "found" && looksLikeUrl(decoded);
+  const markdown = buildMarkdown(status, frameBase64, decoded, errorMessage, wifi);
 
   return (
     <Detail
       markdown={markdown}
       actions={
         <ActionPanel>
-          {status === "found" && looksLikeUrl(decoded) && <Action.OpenInBrowser url={decoded} />}
+          {status === "found" && wifi && (
+            <Action
+              title="Connect to Network"
+              onAction={async () => {
+                try {
+                  await showToast({ style: Toast.Style.Animated, title: `Connecting to ${wifi.ssid}…` });
+                  await connectToWifi(wifi);
+                  await showHUD(`Connected to ${wifi.ssid}`);
+                } catch (error) {
+                  await showToast({
+                    style: Toast.Style.Failure,
+                    title: "Connection failed",
+                    message: error instanceof Error ? error.message : String(error),
+                  });
+                }
+              }}
+            />
+          )}
+          {status === "found" && isUrl && <Action.OpenInBrowser url={decoded} />}
           {status === "found" && (
             <Action.CopyToClipboard
               title="Copy to Clipboard"
@@ -120,14 +191,35 @@ export default function Command() {
   );
 }
 
-function buildMarkdown(status: ScanStatus, frameBase64: string, decoded: string, errorMessage: string): string {
-  const frame = frameBase64 ? `![Camera Preview](data:image/jpeg;base64,${frameBase64})\n\n` : "";
-
+function buildMarkdown(
+  status: ScanStatus,
+  frameBase64: string,
+  decoded: string,
+  errorMessage: string,
+  wifi: WifiNetwork | null,
+): string {
   switch (status) {
-    case "scanning":
+    case "scanning": {
+      const frame = frameBase64 ? `![Camera Preview](data:image/jpeg;base64,${frameBase64})\n\n` : "";
       return `${frame}**Scanning…** Point a QR code at your camera.`;
-    case "found":
-      return `${frame}**QR Code Found!**\n\n\`${decoded}\`\n\nCopied to clipboard.`;
+    }
+    case "found": {
+      if (wifi) {
+        return [
+          `**Wi-Fi Network Found**`,
+          `| | |`,
+          `|---|---|`,
+          `| **Network** | ${wifi.ssid} |`,
+          `| **Security** | ${wifi.security.toUpperCase()} |`,
+          wifi.hidden ? `| **Hidden** | Yes |` : "",
+          ``,
+          `Copied to clipboard.`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+      }
+      return `**QR Code Found!**\n\n\`${decoded}\`\n\nCopied to clipboard.`;
+    }
     case "error":
       return `**Error**\n\n${errorMessage}`;
   }
