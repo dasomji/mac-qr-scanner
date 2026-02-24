@@ -1,19 +1,25 @@
-import { Detail, Action, ActionPanel, getPreferenceValues, Clipboard, showHUD, showToast, Toast } from "@raycast/api";
+import {
+  Detail,
+  Action,
+  ActionPanel,
+  Clipboard,
+  showHUD,
+  showToast,
+  Toast,
+  environment,
+} from "@raycast/api";
 import { useState, useEffect, useRef } from "react";
-import { execFile } from "node:child_process";
+import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
-import { randomUUID } from "node:crypto";
-import { readFile, unlink } from "node:fs/promises";
+import { createInterface } from "node:readline";
+import { chmod } from "node:fs/promises";
+import { join } from "node:path";
 import { Jimp } from "jimp";
 import jsQR from "jsqr";
 
 const execFileAsync = promisify(execFile);
 
-const PREVIEW_WIDTH = 320;
-
-interface Preferences {
-  warmupDelay: string;
-}
+const STARTUP_TIMEOUT_MS = 5000;
 
 type ScanStatus = "scanning" | "found" | "error";
 
@@ -36,12 +42,9 @@ function looksLikeUrl(text: string): boolean {
 function parseWifi(text: string): WifiNetwork | null {
   if (!text.startsWith("WIFI:")) return null;
 
-  // Strip "WIFI:" prefix and trailing ";;"
   const body = text.slice(5).replace(/;;\s*$/, "");
   const params: Record<string, string> = {};
 
-  // Parse key:value pairs separated by ";"
-  // Values may contain escaped semicolons (\;)
   for (const part of body.split(/(?<!\\);/)) {
     const colonIdx = part.indexOf(":");
     if (colonIdx === -1) continue;
@@ -61,8 +64,9 @@ function parseWifi(text: string): WifiNetwork | null {
 }
 
 async function connectToWifi(network: WifiNetwork): Promise<void> {
-  // Find the Wi-Fi interface name
-  const { stdout } = await execFileAsync("/usr/sbin/networksetup", ["-listallhardwareports"]);
+  const { stdout } = await execFileAsync("/usr/sbin/networksetup", [
+    "-listallhardwareports",
+  ]);
   const match = stdout.match(/Hardware Port: Wi-Fi\nDevice: (\w+)/);
   const iface = match ? match[1] : "en0";
 
@@ -72,90 +76,152 @@ async function connectToWifi(network: WifiNetwork): Promise<void> {
   await execFileAsync("/usr/sbin/networksetup", args);
 }
 
-async function resolveImagesnap(): Promise<string> {
-  const { stdout } = await execFileAsync("/bin/zsh", ["-lc", "which imagesnap"]);
-  return stdout.trim();
-}
-
 export default function Command() {
   const [status, setStatus] = useState<ScanStatus>("scanning");
-  const [frameBase64, setFrameBase64] = useState<string>("");
+  const [cameraReady, setCameraReady] = useState(false);
   const [decoded, setDecoded] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const cancelledRef = useRef(false);
+  const procRef = useRef<ChildProcess | null>(null);
+  const doneRef = useRef(false);
 
   useEffect(() => {
-    cancelledRef.current = false;
+    doneRef.current = false;
+    let startupTimer: ReturnType<typeof setTimeout> | null = null;
 
-    async function scanLoop() {
-      const { warmupDelay } = getPreferenceValues<Preferences>();
+    async function startCapture() {
+      const binaryPath = join(environment.assetsPath, "capture-frame");
 
-      let imagesnapPath: string;
       try {
-        imagesnapPath = await resolveImagesnap();
+        await chmod(binaryPath, 0o755);
       } catch {
-        setStatus("error");
-        setErrorMessage("imagesnap not found. Install it with: brew install imagesnap");
-        return;
+        // Ignore — may already be executable
       }
 
-      let delay = warmupDelay;
+      const proc = spawn(binaryPath, [], {
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      procRef.current = proc;
 
-      while (!cancelledRef.current) {
-        const tmpFile = `/tmp/raycast-qr-${randomUUID()}.jpg`;
+      startupTimer = setTimeout(() => {
+        if (!doneRef.current) {
+          setStatus("error");
+          setErrorMessage(
+            "Camera did not produce frames. Check camera permissions in System Settings > Privacy & Security > Camera.",
+          );
+          proc.kill("SIGTERM");
+        }
+      }, STARTUP_TIMEOUT_MS);
+
+      let stderrOutput = "";
+      proc.stderr?.on("data", (chunk: Buffer) => {
+        stderrOutput += chunk.toString();
+      });
+
+      proc.on("close", (code) => {
+        if (doneRef.current) return;
+        if (code !== 0 && code !== null) {
+          setStatus("error");
+          setErrorMessage(
+            stderrOutput.trim() || `Camera process exited with code ${code}`,
+          );
+        }
+      });
+
+      proc.on("error", (err) => {
+        if (doneRef.current) return;
+        setStatus("error");
+        setErrorMessage(err.message);
+      });
+
+      const rl = createInterface({ input: proc.stdout! });
+
+      // QR detection state
+      let latestLine: string | null = null;
+      let processing = false;
+
+      async function detectQR(base64Line: string) {
+        if (doneRef.current) return;
+        processing = true;
 
         try {
-          await execFileAsync(imagesnapPath, ["-w", delay, tmpFile]);
-          if (cancelledRef.current) {
-            unlink(tmpFile).catch(() => {});
-            return;
-          }
-
-          const fileBuffer = await readFile(tmpFile);
-
-          const image = await Jimp.read(fileBuffer);
+          const buffer = Buffer.from(base64Line, "base64");
+          const image = await Jimp.read(buffer);
           const { data, width, height } = image.bitmap;
-          const imageData = new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength);
+          const imageData = new Uint8ClampedArray(
+            data.buffer,
+            data.byteOffset,
+            data.byteLength,
+          );
           const result = jsQR(imageData, width, height);
 
-          // Resize for preview (smaller = faster rendering, fits without scrolling)
-          const preview = image.clone().resize({ w: PREVIEW_WIDTH });
-          const previewBuf = await preview.getBuffer("image/jpeg");
-          setFrameBase64(previewBuf.toString("base64"));
-
-          unlink(tmpFile).catch(() => {});
-
-          if (result) {
+          if (result && !doneRef.current) {
+            doneRef.current = true;
             await Clipboard.copy(result.data);
             setDecoded(result.data);
             setStatus("found");
+            rl.close();
+            proc.kill("SIGTERM");
             return;
           }
-        } catch (error) {
-          unlink(tmpFile).catch(() => {});
-          if (cancelledRef.current) return;
-          setStatus("error");
-          setErrorMessage(error instanceof Error ? error.message : String(error));
-          return;
+        } catch {
+          // Corrupted frame — skip
         }
 
-        delay = "0";
+        processing = false;
+
+        if (latestLine && !doneRef.current) {
+          const next = latestLine;
+          latestLine = null;
+          detectQR(next);
+        }
       }
+
+      rl.on("line", (line) => {
+        if (doneRef.current) return;
+
+        if (startupTimer) {
+          clearTimeout(startupTimer);
+          startupTimer = null;
+        }
+        setCameraReady(true);
+
+        // QR detection (every frame, with frame dropping)
+        if (processing) {
+          latestLine = line;
+        } else {
+          detectQR(line);
+        }
+      });
     }
 
-    scanLoop();
+    startCapture();
 
     return () => {
-      cancelledRef.current = true;
+      doneRef.current = true;
+      if (startupTimer) clearTimeout(startupTimer);
+      if (procRef.current) {
+        procRef.current.kill("SIGTERM");
+        procRef.current = null;
+      }
     };
   }, []);
 
   const wifi = status === "found" ? parseWifi(decoded) : null;
   const isUrl = status === "found" && looksLikeUrl(decoded);
-  const markdown = buildMarkdown(status, frameBase64, decoded, errorMessage, wifi);
+  const markdown = buildMarkdown(
+    status,
+    cameraReady,
+    decoded,
+    errorMessage,
+    wifi,
+  );
 
   return (
     <Detail
+      isLoading={status === "scanning"}
+      navigationTitle={
+        status === "scanning" ? "Point a QR code at your camera" : undefined
+      }
       markdown={markdown}
       actions={
         <ActionPanel>
@@ -164,20 +230,26 @@ export default function Command() {
               title="Connect to Network"
               onAction={async () => {
                 try {
-                  await showToast({ style: Toast.Style.Animated, title: `Connecting to ${wifi.ssid}…` });
+                  await showToast({
+                    style: Toast.Style.Animated,
+                    title: `Connecting to ${wifi.ssid}…`,
+                  });
                   await connectToWifi(wifi);
                   await showHUD(`Connected to ${wifi.ssid}`);
                 } catch (error) {
                   await showToast({
                     style: Toast.Style.Failure,
                     title: "Connection failed",
-                    message: error instanceof Error ? error.message : String(error),
+                    message:
+                      error instanceof Error ? error.message : String(error),
                   });
                 }
               }}
             />
           )}
-          {status === "found" && isUrl && <Action.OpenInBrowser url={decoded} />}
+          {status === "found" && isUrl && (
+            <Action.OpenInBrowser url={decoded} />
+          )}
           {status === "found" && (
             <Action.CopyToClipboard
               title="Copy to Clipboard"
@@ -193,16 +265,17 @@ export default function Command() {
 
 function buildMarkdown(
   status: ScanStatus,
-  frameBase64: string,
+  cameraReady: boolean,
   decoded: string,
   errorMessage: string,
   wifi: WifiNetwork | null,
 ): string {
   switch (status) {
-    case "scanning": {
-      const frame = frameBase64 ? `![Camera Preview](data:image/jpeg;base64,${frameBase64})\n\n` : "";
-      return `${frame}**Scanning…** Point a QR code at your camera.`;
-    }
+    case "scanning":
+      if (!cameraReady) {
+        return `🟠 **Camera is loading…**`;
+      }
+      return `🟢 **Camera is ready**\n\nSimply hold the QR code in front of your camera.`;
     case "found": {
       if (wifi) {
         return [

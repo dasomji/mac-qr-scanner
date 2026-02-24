@@ -14,21 +14,6 @@
       "mode": "view"
     }
   ],
-  "preferences": [
-    {
-      "name": "warmupDelay",
-      "title": "Camera Warmup Delay",
-      "description": "Time to wait for camera exposure adjustment before capturing",
-      "type": "dropdown",
-      "required": false,
-      "default": "1",
-      "data": [
-        { "title": "1 second", "value": "1" },
-        { "title": "2 seconds", "value": "2" },
-        { "title": "3 seconds", "value": "3" }
-      ]
-    }
-  ],
   "dependencies": {
     "@raycast/api": "^1.93.2",
     "jimp": "^1.6.0",
@@ -40,8 +25,9 @@
     "typescript": "^5.7.3"
   },
   "scripts": {
-    "build": "ray build",
-    "dev": "ray develop",
+    "build-swift": "swiftc swift/CaptureFrame.swift -O -target arm64-apple-macosx12.0 -framework AVFoundation -framework CoreMedia -framework CoreVideo -framework CoreImage -framework ImageIO -o assets/capture-frame-arm64 && swiftc swift/CaptureFrame.swift -O -target x86_64-apple-macosx12.0 -framework AVFoundation -framework CoreMedia -framework CoreVideo -framework CoreImage -framework ImageIO -o assets/capture-frame-x86_64 && lipo -create -output assets/capture-frame assets/capture-frame-arm64 assets/capture-frame-x86_64 && rm assets/capture-frame-arm64 assets/capture-frame-x86_64",
+    "build": "npm run build-swift && ray build",
+    "dev": "npm run build-swift && ray develop",
     "fix-lint": "ray lint --fix",
     "lint": "ray lint"
   }
