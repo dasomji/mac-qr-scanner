@@ -12,6 +12,13 @@
       "subtitle": "Webcam QR Scanner",
       "description": "Capture a frame from your webcam and decode any QR code in it",
       "mode": "view"
+    },
+    {
+      "name": "scan-history",
+      "title": "Scan History",
+      "subtitle": "Webcam QR Scanner",
+      "description": "View previously scanned QR codes",
+      "mode": "view"
     }
   ],
   "dependencies": {

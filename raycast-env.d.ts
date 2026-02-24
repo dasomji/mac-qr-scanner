@@ -15,10 +15,14 @@ declare type Preferences = ExtensionPreferences
 declare namespace Preferences {
   /** Preferences accessible in the `scan-qr-code` command */
   export type ScanQrCode = ExtensionPreferences & {}
+  /** Preferences accessible in the `scan-history` command */
+  export type ScanHistory = ExtensionPreferences & {}
 }
 
 declare namespace Arguments {
   /** Arguments passed to the `scan-qr-code` command */
   export type ScanQrCode = {}
+  /** Arguments passed to the `scan-history` command */
+  export type ScanHistory = {}
 }
 
