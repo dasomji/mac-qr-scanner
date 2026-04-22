@@ -1,7 +1,7 @@
 # EXAMPLE-002: Parallel Smoke — Status
 
 **Current Step:** Step 3: Delivery
-**Status:** 🟡 In Progress
+**Status:** ✅ Complete
 **Last Updated:** 2026-04-22
 **Review Level:** 0
 **Review Counter:** 0
@@ -34,7 +34,7 @@
 ---
 
 ### Step 3: Delivery
-**Status:** 🟨 In Progress
+**Status:** ✅ Complete
 
 
 
@@ -63,6 +63,8 @@
 | 2026-04-22 15:35 | Step 0 started | Preflight |
 | 2026-04-22 15:35 | Worker iter 1 | error (code 1) in 44s, tools: 0 |
 | 2026-04-22 15:35 | No progress | Iteration 1: 0 new checkboxes (1/3 stall limit) |
+| 2026-04-22 15:37 | Worker iter 2 | done in 113s, tools: 23 |
+| 2026-04-22 15:37 | Task complete | .DONE created |
 
 ---
 
