@@ -1,6 +1,6 @@
 # EXAMPLE-002: Parallel Smoke — Status
 
-**Current Step:** Step 1: Create Parallel Hello File
+**Current Step:** Step 2: Verification
 **Status:** 🟡 In Progress
 **Last Updated:** 2026-04-22
 **Review Level:** 0
@@ -19,15 +19,15 @@
 ---
 
 ### Step 1: Create Parallel Hello File
-**Status:** 🟨 In Progress
+**Status:** ✅ Complete
 
-- [ ] Create `hello-taskplane-2.md` in project root
-- [ ] Add title, task ID (EXAMPLE-002), and parallel-safe note
+- [x] Create `hello-taskplane-2.md` in project root
+- [x] Add title, task ID (EXAMPLE-002), and parallel-safe note
 
 ---
 
 ### Step 2: Verification
-**Status:** ⬜ Not Started
+**Status:** 🟨 In Progress
 
 - [ ] Verify file exists and matches expected content
 
