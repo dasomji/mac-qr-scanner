@@ -1,25 +1,25 @@
 # EXAMPLE-002: Parallel Smoke — Status
 
-**Current Step:** Not Started
-**Status:** 🔵 Ready for Execution
+**Current Step:** Step 1: Create Parallel Hello File
+**Status:** 🟡 In Progress
 **Last Updated:** 2026-04-22
 **Review Level:** 0
 **Review Counter:** 0
-**Iteration:** 0
+**Iteration:** 2
 **Size:** S
 
 ---
 
 ### Step 0: Preflight
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Verify PROMPT.md is readable
-- [ ] Verify STATUS.md exists
+- [x] Verify PROMPT.md is readable
+- [x] Verify STATUS.md exists
 
 ---
 
 ### Step 1: Create Parallel Hello File
-**Status:** ⬜ Not Started
+**Status:** 🟨 In Progress
 
 - [ ] Create `hello-taskplane-2.md` in project root
 - [ ] Add title, task ID (EXAMPLE-002), and parallel-safe note
@@ -59,6 +59,10 @@
 | Timestamp | Action | Outcome |
 |-----------|--------|---------|
 | 2026-04-22 | Task staged | PROMPT.md and STATUS.md created |
+| 2026-04-22 15:35 | Task started | Runtime V2 lane-runner execution |
+| 2026-04-22 15:35 | Step 0 started | Preflight |
+| 2026-04-22 15:35 | Worker iter 1 | error (code 1) in 44s, tools: 0 |
+| 2026-04-22 15:35 | No progress | Iteration 1: 0 new checkboxes (1/3 stall limit) |
 
 ---
 
