@@ -1,6 +1,6 @@
 # EXAMPLE-001: Hello World — Status
 
-**Current Step:** Step 1: Create Hello File
+**Current Step:** Step 2: Verification
 **Status:** 🟡 In Progress
 **Last Updated:** 2026-04-22
 **Review Level:** 0
@@ -19,15 +19,15 @@
 ---
 
 ### Step 1: Create Hello File
-**Status:** 🟨 In Progress
+**Status:** ✅ Complete
 
-- [ ] Create `hello-taskplane.md` in project root
-- [ ] Add title, date, and task ID (EXAMPLE-001)
+- [x] Create `hello-taskplane.md` in project root
+- [x] Add title, date, and task ID (EXAMPLE-001)
 
 ---
 
 ### Step 2: Verification
-**Status:** ⬜ Not Started
+**Status:** 🟨 In Progress
 
 - [ ] Verify file exists and matches expected content
 
