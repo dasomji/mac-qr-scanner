@@ -58,7 +58,7 @@ export function ScanResultDetail({ data }: { data: string }) {
               }}
             />
           )}
-          {wifi && (
+          {wifi && wifi.password && (
             <Action
               title={showPassword ? "Hide Password" : "Show Password"}
               icon={showPassword ? Icon.EyeDisabled : Icon.Eye}
@@ -140,10 +140,12 @@ function buildWifiMetadata(
         {canConnectToWifi ? (
           <Detail.Metadata.TagList.Item text="↵ Connect" color={Color.Green} />
         ) : null}
-        <Detail.Metadata.TagList.Item
-          text="⌘⇧P Display Password"
-          color={Color.Orange}
-        />
+        {wifi.password ? (
+          <Detail.Metadata.TagList.Item
+            text="⌘⇧P Display Password"
+            color={Color.Orange}
+          />
+        ) : null}
         <Detail.Metadata.TagList.Item
           text="⌘⇧C Copy Network Name"
           color={Color.Blue}

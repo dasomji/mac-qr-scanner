@@ -118,7 +118,7 @@ export default function ScanHistory() {
       {history.length === 0 && !isLoading ? (
         <List.EmptyView
           icon={Icon.Clock}
-          title="No Scan History"
+          title="No QR Scan History"
           description="QR codes you scan will appear here."
         />
       ) : null}
