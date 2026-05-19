@@ -3,7 +3,6 @@ import {
   Action,
   ActionPanel,
   Icon,
-  Color,
   showHUD,
   showToast,
   Toast,
@@ -28,11 +27,7 @@ export function ScanResultDetail({ data }: { data: string }) {
   return (
     <Detail
       markdown={buildMarkdown(data, wifi, isUrl, canConnectToWifi)}
-      metadata={
-        wifi
-          ? buildWifiMetadata(wifi, showPassword, canConnectToWifi)
-          : undefined
-      }
+      metadata={wifi ? buildWifiMetadata(wifi, showPassword) : undefined}
       actions={
         <ActionPanel>
           {wifi && canConnectToWifi && (
@@ -91,7 +86,7 @@ export function ScanResultDetail({ data }: { data: string }) {
             />
           )}
           <Action
-            title="View History"
+            title="View QR Scan History"
             icon={Icon.Clock}
             shortcut={{ modifiers: ["cmd"], key: "h" }}
             onAction={async () => {
@@ -115,11 +110,7 @@ function escapeMarkdown(value: string): string {
   return value.replace(/[\\`*_{}[\]()#+\-.!|>]/g, "\\$&").replace(/\n/g, "\\n");
 }
 
-function buildWifiMetadata(
-  wifi: WifiNetwork,
-  showPassword: boolean,
-  canConnectToWifi: boolean,
-) {
+function buildWifiMetadata(wifi: WifiNetwork, showPassword: boolean) {
   return (
     <Detail.Metadata>
       <Detail.Metadata.Label title="Network" text={wifi.ssid} />
@@ -135,28 +126,6 @@ function buildWifiMetadata(
         />
       ) : null}
       {wifi.hidden ? <Detail.Metadata.Label title="Hidden" text="Yes" /> : null}
-      <Detail.Metadata.Separator />
-      <Detail.Metadata.TagList title="Actions">
-        {canConnectToWifi ? (
-          <Detail.Metadata.TagList.Item text="↵ Connect" color={Color.Green} />
-        ) : null}
-        {wifi.password ? (
-          <Detail.Metadata.TagList.Item
-            text="⌘⇧P Display Password"
-            color={Color.Orange}
-          />
-        ) : null}
-        <Detail.Metadata.TagList.Item
-          text="⌘⇧C Copy Network Name"
-          color={Color.Blue}
-        />
-        {wifi.password ? (
-          <Detail.Metadata.TagList.Item
-            text="⌘⇧V Copy Password"
-            color={Color.Purple}
-          />
-        ) : null}
-      </Detail.Metadata.TagList>
     </Detail.Metadata>
   );
 }
