@@ -39,8 +39,6 @@ export function ScanResultDetail({ data }: { data: string }) {
                   await showToast({
                     style: Toast.Style.Animated,
                     title: `Connecting to ${wifi.ssid}…`,
-                    message:
-                      "If macOS shows a networksetup dialog, you can click Deny.",
                   });
                   await connectToWifi(wifi);
                   await showHUD(`Connected to ${wifi.ssid}`);
@@ -152,8 +150,6 @@ function buildMarkdown(
       `**Wi-Fi Network Found**`,
       ``,
       `Press \`↵\` to connect to **${wifi.ssid}**.`,
-      ``,
-      `> When connecting, macOS may show a \`networksetup\` dialog asking to use the System keychain. This is a side effect of how macOS allows external programs to establish a Wi-Fi connection. You can safely click **Deny**.`,
     ].join("\n");
   }
 
