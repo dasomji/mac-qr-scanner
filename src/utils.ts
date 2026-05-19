@@ -1,5 +1,5 @@
 import { LocalStorage } from "@raycast/api";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 
@@ -67,9 +67,43 @@ export async function connectToWifi(network: WifiNetwork): Promise<void> {
   const iface = match ? match[1] : "en0";
 
   const args = ["-setairportnetwork", iface, network.ssid];
-  if (network.password) args.push(network.password);
 
-  await execFileAsync("/usr/sbin/networksetup", args);
+  if (!network.password) {
+    await execFileAsync("/usr/sbin/networksetup", args);
+    return;
+  }
+
+  await runNetworkSetupWithPasswordFromStdin([...args, "-"], network.password);
+}
+
+async function runNetworkSetupWithPasswordFromStdin(
+  args: string[],
+  password: string,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const proc = spawn("/usr/sbin/networksetup", args, {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stderr = "";
+    proc.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+
+    proc.on("error", reject);
+    proc.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(
+        new Error(stderr.trim() || `networksetup exited with code ${code}`),
+      );
+    });
+
+    proc.stdin.end(`${password}\n`);
+  });
 }
 
 function classifyQrData(data: string): HistoryEntryType {
