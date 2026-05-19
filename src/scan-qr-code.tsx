@@ -11,9 +11,9 @@ import { saveToHistory } from "./utils";
 import { ScanResultDetail } from "./scan-result-detail";
 
 const STARTUP_TIMEOUT_MS = 5000;
-const MAX_FRAME_LINE_LENGTH = 2_000_000;
-const MAX_FRAME_BUFFER_BYTES = 1_500_000;
-const MAX_FRAME_PIXELS = 2_000_000;
+const MAX_FRAME_LINE_LENGTH = 20_000_000;
+const MAX_FRAME_BUFFER_BYTES = 15_000_000;
+const MAX_FRAME_PIXELS = 12_000_000;
 
 type ScanStatus = "scanning" | "found" | "error";
 
@@ -97,21 +97,18 @@ export default function Command() {
 
         try {
           if (base64Line.length > MAX_FRAME_LINE_LENGTH) {
-            failCapture("Camera helper produced an oversized frame.");
-            return;
+            throw new Error("Frame line is too large");
           }
 
           const buffer = Buffer.from(base64Line, "base64");
           if (buffer.length > MAX_FRAME_BUFFER_BYTES) {
-            failCapture("Camera helper produced an oversized frame.");
-            return;
+            throw new Error("Frame buffer is too large");
           }
 
           const image = await Jimp.read(buffer);
           const { data, width, height } = image.bitmap;
           if (width * height > MAX_FRAME_PIXELS) {
-            failCapture("Camera helper produced an oversized frame.");
-            return;
+            throw new Error("Frame dimensions are too large");
           }
           const imageData = new Uint8ClampedArray(
             data.buffer,
