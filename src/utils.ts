@@ -68,12 +68,53 @@ export async function connectToWifi(network: WifiNetwork): Promise<void> {
 
   const args = ["-setairportnetwork", iface, network.ssid];
 
-  if (!network.password) {
-    await execFileAsync("/usr/sbin/networksetup", args);
-    return;
-  }
+  try {
+    if (!network.password) {
+      await execFileAsync("/usr/sbin/networksetup", args);
+      return;
+    }
 
-  await execFileAsync("/usr/sbin/networksetup", [...args, network.password]);
+    await execFileAsync("/usr/sbin/networksetup", [...args, network.password]);
+  } catch (error) {
+    throw new Error(sanitizeNetworkSetupError(error, network));
+  }
+}
+
+export function sanitizeNetworkSetupError(
+  error: unknown,
+  network: WifiNetwork,
+): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const redactions = [network.ssid, network.password].filter(Boolean);
+  return redactions.reduce(
+    (message, secret) => message.split(secret).join("[redacted]"),
+    raw,
+  );
+}
+
+function escapeWifiValue(value: string): string {
+  return value.replace(/[\\;,:]/g, "\\$&");
+}
+
+function historyDataFor(data: string, wifi: WifiNetwork | null): string {
+  if (!wifi) return data;
+
+  const fields = [
+    `T:${escapeWifiValue(wifi.security)}`,
+    `S:${escapeWifiValue(wifi.ssid)}`,
+    wifi.hidden ? "H:true" : "",
+  ].filter((part) => part !== "");
+
+  return `WIFI:${fields.join(";")};;`;
+}
+
+function historyWifiNetwork(wifi: WifiNetwork | null): WifiNetwork | undefined {
+  if (!wifi) return undefined;
+
+  return {
+    ...wifi,
+    password: "",
+  };
 }
 
 function classifyQrData(data: string): HistoryEntryType {
@@ -102,10 +143,10 @@ export async function saveToHistory(data: string): Promise<void> {
   const wifi = parseWifi(data);
   const entry: HistoryEntry = {
     id: randomUUID(),
-    data,
+    data: historyDataFor(data, wifi),
     type: classifyQrData(data),
     timestamp: Date.now(),
-    wifiNetwork: wifi ?? undefined,
+    wifiNetwork: historyWifiNetwork(wifi),
   };
   history.unshift(entry);
   if (history.length > MAX_HISTORY) {
