@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 
 const execFileAsync = promisify(execFile);
+const NETWORK_SETUP_TIMEOUT_MS = 15000;
 
 // --- Types ---
 
@@ -41,7 +42,7 @@ export function parseWifi(text: string): WifiNetwork | null {
   const body = text.slice(5).replace(/;;\s*$/, "");
   const params: Record<string, string> = {};
 
-  for (const part of body.split(/(?<!\\);/)) {
+  for (const part of splitWifiFields(body)) {
     const colonIdx = part.indexOf(":");
     if (colonIdx === -1) continue;
     const key = part.slice(0, colonIdx).toUpperCase();
@@ -59,10 +60,37 @@ export function parseWifi(text: string): WifiNetwork | null {
   };
 }
 
+function splitWifiFields(body: string): string[] {
+  const fields: string[] = [];
+  let fieldStart = 0;
+
+  for (let index = 0; index < body.length; index++) {
+    if (body[index] !== ";" || isEscaped(body, index)) continue;
+
+    fields.push(body.slice(fieldStart, index));
+    fieldStart = index + 1;
+  }
+
+  fields.push(body.slice(fieldStart));
+  return fields;
+}
+
+function isEscaped(text: string, index: number): boolean {
+  let backslashCount = 0;
+
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor--) {
+    backslashCount++;
+  }
+
+  return backslashCount % 2 === 1;
+}
+
 export async function connectToWifi(network: WifiNetwork): Promise<void> {
-  const { stdout } = await execFileAsync("/usr/sbin/networksetup", [
-    "-listallhardwareports",
-  ]);
+  const { stdout } = await execFileAsync(
+    "/usr/sbin/networksetup",
+    ["-listallhardwareports"],
+    { timeout: NETWORK_SETUP_TIMEOUT_MS },
+  );
   const match = stdout.match(/Hardware Port: Wi-Fi\nDevice: (\w+)/);
   const iface = match ? match[1] : "en0";
 
@@ -70,11 +98,15 @@ export async function connectToWifi(network: WifiNetwork): Promise<void> {
 
   try {
     if (!network.password) {
-      await execFileAsync("/usr/sbin/networksetup", args);
+      await execFileAsync("/usr/sbin/networksetup", args, {
+        timeout: NETWORK_SETUP_TIMEOUT_MS,
+      });
       return;
     }
 
-    await execFileAsync("/usr/sbin/networksetup", [...args, network.password]);
+    await execFileAsync("/usr/sbin/networksetup", [...args, network.password], {
+      timeout: NETWORK_SETUP_TIMEOUT_MS,
+    });
   } catch (error) {
     throw new Error(sanitizeNetworkSetupError(error, network));
   }
@@ -129,13 +161,54 @@ const HISTORY_KEY = "scan-history";
 const MAX_HISTORY = 100;
 
 export async function getHistory(): Promise<HistoryEntry[]> {
-  const raw = await LocalStorage.getItem<string>(HISTORY_KEY);
-  if (!raw) return [];
+  let raw: string | undefined;
+
   try {
-    return JSON.parse(raw) as HistoryEntry[];
+    raw = await LocalStorage.getItem<string>(HISTORY_KEY);
   } catch {
     return [];
   }
+
+  if (!raw) return [];
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isHistoryEntry);
+  } catch {
+    return [];
+  }
+}
+
+function isHistoryEntry(entry: unknown): entry is HistoryEntry {
+  if (!entry || typeof entry !== "object") return false;
+
+  const candidate = entry as Partial<HistoryEntry>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.data === "string" &&
+    isHistoryEntryType(candidate.type) &&
+    typeof candidate.timestamp === "number" &&
+    Number.isFinite(candidate.timestamp) &&
+    (candidate.wifiNetwork === undefined ||
+      isWifiNetwork(candidate.wifiNetwork))
+  );
+}
+
+function isHistoryEntryType(type: unknown): type is HistoryEntryType {
+  return type === "text" || type === "url" || type === "wifi";
+}
+
+function isWifiNetwork(network: unknown): network is WifiNetwork {
+  if (!network || typeof network !== "object") return false;
+
+  const candidate = network as Partial<WifiNetwork>;
+  return (
+    typeof candidate.ssid === "string" &&
+    typeof candidate.password === "string" &&
+    typeof candidate.security === "string" &&
+    typeof candidate.hidden === "boolean"
+  );
 }
 
 export async function saveToHistory(data: string): Promise<void> {

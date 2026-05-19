@@ -3,7 +3,6 @@ import {
   Action,
   ActionPanel,
   Icon,
-  Color,
   showHUD,
   showToast,
   Toast,
@@ -23,14 +22,15 @@ export function ScanResultDetail({ data }: { data: string }) {
 
   const wifi = parseWifi(data);
   const isUrl = looksLikeUrl(data);
+  const canConnectToWifi = wifi ? canConnect(wifi) : false;
 
   return (
     <Detail
-      markdown={buildMarkdown(data, wifi, isUrl)}
+      markdown={buildMarkdown(data, wifi, isUrl, canConnectToWifi)}
       metadata={wifi ? buildWifiMetadata(wifi, showPassword) : undefined}
       actions={
         <ActionPanel>
-          {wifi && (
+          {wifi && canConnectToWifi && (
             <Action
               title="Connect to Network"
               icon={Icon.Wifi}
@@ -53,7 +53,7 @@ export function ScanResultDetail({ data }: { data: string }) {
               }}
             />
           )}
-          {wifi && (
+          {wifi && wifi.password && (
             <Action
               title={showPassword ? "Hide Password" : "Show Password"}
               icon={showPassword ? Icon.EyeDisabled : Icon.Eye}
@@ -86,7 +86,7 @@ export function ScanResultDetail({ data }: { data: string }) {
             />
           )}
           <Action
-            title="View History"
+            title="View QR Scan History"
             icon={Icon.Clock}
             shortcut={{ modifiers: ["cmd"], key: "h" }}
             onAction={async () => {
@@ -100,6 +100,14 @@ export function ScanResultDetail({ data }: { data: string }) {
       }
     />
   );
+}
+
+function canConnect(wifi: WifiNetwork): boolean {
+  return wifi.security.toLowerCase() === "nopass" || wifi.password.length > 0;
+}
+
+function escapeMarkdown(value: string): string {
+  return value.replace(/[\\`*_{}[\]()#+\-.!|>]/g, "\\$&").replace(/\n/g, "\\n");
 }
 
 function buildWifiMetadata(wifi: WifiNetwork, showPassword: boolean) {
@@ -118,24 +126,6 @@ function buildWifiMetadata(wifi: WifiNetwork, showPassword: boolean) {
         />
       ) : null}
       {wifi.hidden ? <Detail.Metadata.Label title="Hidden" text="Yes" /> : null}
-      <Detail.Metadata.Separator />
-      <Detail.Metadata.TagList title="Actions">
-        <Detail.Metadata.TagList.Item text="↵ Connect" color={Color.Green} />
-        <Detail.Metadata.TagList.Item
-          text="⌘⇧P Display Password"
-          color={Color.Orange}
-        />
-        <Detail.Metadata.TagList.Item
-          text="⌘⇧C Copy Network Name"
-          color={Color.Blue}
-        />
-        {wifi.password ? (
-          <Detail.Metadata.TagList.Item
-            text="⌘⇧V Copy Password"
-            color={Color.Purple}
-          />
-        ) : null}
-      </Detail.Metadata.TagList>
     </Detail.Metadata>
   );
 }
@@ -144,20 +134,26 @@ function buildMarkdown(
   decoded: string,
   wifi: WifiNetwork | null,
   isUrl: boolean,
+  canConnectToWifi: boolean,
 ): string {
   if (wifi) {
+    const network = escapeMarkdown(wifi.ssid);
     return [
       `**Wi-Fi Network Found**`,
       ``,
-      `Press \`↵\` to connect to **${wifi.ssid}**.`,
+      canConnectToWifi
+        ? `Press \`↵\` to connect to **${network}**.`
+        : `**${network}** is saved without a password. Copy the network name and join manually if needed.`,
     ].join("\n");
   }
+
+  const safeDecoded = escapeMarkdown(decoded);
 
   if (isUrl) {
     return [
       `**QR Code Found!**`,
       ``,
-      `\`${decoded}\``,
+      `\`${safeDecoded}\``,
       ``,
       `---`,
       ``,
@@ -168,7 +164,7 @@ function buildMarkdown(
   return [
     `**QR Code Found!**`,
     ``,
-    `\`${decoded}\``,
+    `\`${safeDecoded}\``,
     ``,
     `---`,
     ``,

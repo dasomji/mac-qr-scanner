@@ -29,7 +29,7 @@
     },
     {
       "name": "scan-history",
-      "title": "Scan History",
+      "title": "QR Scan History",
       "subtitle": "Webcam QR Scanner",
       "description": "View previously scanned QR codes.",
       "mode": "view"

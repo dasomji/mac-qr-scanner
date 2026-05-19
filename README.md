@@ -23,7 +23,7 @@ Webcam QR Scanner lets you scan physical QR codes with your Mac's webcam from in
 
 ### View QR Code History
 
-1. Run **Scan History** in Raycast.
+1. Run **QR Scan History** in Raycast.
 2. Select a previous scan to view its details.
 3. Use the actions to copy the content, open a link, delete one entry, clear all history, or start a new scan.
 
@@ -47,7 +47,7 @@ Scanning happens locally on your Mac:
 - QR contents are not sent to any external service.
 - Scan history is stored locally in Raycast's extension storage.
 
-Be aware that QR codes can contain sensitive data, including Wi-Fi passwords. If you scan sensitive codes, use **Delete** or **Clear All History** from the **Scan History** command when you no longer need them.
+Be aware that QR codes can contain sensitive data. If you scan sensitive codes, use **Delete** or **Clear All History** from the **QR Scan History** command when you no longer need them.
 
 ## Native Camera Helper
 

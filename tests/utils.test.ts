@@ -2,16 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const storage = new Map<string, string>();
 
+const localStorageMock = vi.hoisted(() => ({
+  getItem: vi.fn(async (key: string) => storage.get(key)),
+  setItem: vi.fn(async (key: string, value: string) => {
+    storage.set(key, value);
+  }),
+  removeItem: vi.fn(async (key: string) => {
+    storage.delete(key);
+  }),
+}));
+
 vi.mock("@raycast/api", () => ({
-  LocalStorage: {
-    getItem: vi.fn(async (key: string) => storage.get(key)),
-    setItem: vi.fn(async (key: string, value: string) => {
-      storage.set(key, value);
-    }),
-    removeItem: vi.fn(async (key: string) => {
-      storage.delete(key);
-    }),
-  },
+  LocalStorage: localStorageMock,
 }));
 
 vi.mock("node:crypto", () => ({
@@ -30,6 +32,14 @@ import {
 describe("QR utility behavior", () => {
   beforeEach(() => {
     storage.clear();
+    vi.clearAllMocks();
+    localStorageMock.getItem.mockImplementation(async (key: string) => storage.get(key));
+    localStorageMock.setItem.mockImplementation(async (key: string, value: string) => {
+      storage.set(key, value);
+    });
+    localStorageMock.removeItem.mockImplementation(async (key: string) => {
+      storage.delete(key);
+    });
   });
 
   it("recognizes only http and https URLs", () => {
@@ -45,6 +55,15 @@ describe("QR utility behavior", () => {
       password: "pa:ss,word",
       security: "WPA",
       hidden: true,
+    });
+  });
+
+  it("parses Wi-Fi QR values ending with a literal backslash", () => {
+    expect(parseWifi(String.raw`WIFI:S:trailing\\;T:WPA;P:secret;;`)).toEqual({
+      ssid: "trailing\\",
+      password: "secret",
+      security: "WPA",
+      hidden: false,
     });
   });
 
@@ -70,6 +89,23 @@ describe("QR utility behavior", () => {
     expect(await getHistory()).toHaveLength(1);
 
     await clearHistory();
+    expect(await getHistory()).toEqual([]);
+  });
+
+  it("drops malformed history entries and recovers from storage read failures", async () => {
+    storage.set(
+      "scan-history",
+      JSON.stringify([
+        { id: "ok", data: "https://example.com", type: "url", timestamp: 1 },
+        { id: "bad", data: 123, type: "wifi", timestamp: "yesterday" },
+      ]),
+    );
+
+    expect(await getHistory()).toEqual([
+      { id: "ok", data: "https://example.com", type: "url", timestamp: 1 },
+    ]);
+
+    localStorageMock.getItem.mockRejectedValueOnce(new Error("storage unavailable"));
     expect(await getHistory()).toEqual([]);
   });
 
