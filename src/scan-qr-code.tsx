@@ -11,6 +11,10 @@ import { saveToHistory } from "./utils";
 import { ScanResultDetail } from "./scan-result-detail";
 
 const STARTUP_TIMEOUT_MS = 5000;
+const MAX_FRAME_LINE_LENGTH = 2_000_000;
+const MAX_FRAME_BUFFER_BYTES = 1_500_000;
+const MAX_FRAME_PIXELS = 2_000_000;
+const MAX_CONSECUTIVE_INVALID_FRAMES = 10;
 
 type ScanStatus = "scanning" | "found" | "error";
 
@@ -87,21 +91,35 @@ export default function Command() {
       // QR detection state
       let latestLine: string | null = null;
       let processing = false;
+      let invalidFrameCount = 0;
 
       async function detectQR(base64Line: string) {
         if (doneRef.current) return;
         processing = true;
 
         try {
+          if (base64Line.length > MAX_FRAME_LINE_LENGTH) {
+            throw new Error("Frame line is too large");
+          }
+
           const buffer = Buffer.from(base64Line, "base64");
+          if (buffer.length > MAX_FRAME_BUFFER_BYTES) {
+            throw new Error("Frame buffer is too large");
+          }
+
           const image = await Jimp.read(buffer);
           const { data, width, height } = image.bitmap;
+          if (width * height > MAX_FRAME_PIXELS) {
+            throw new Error("Frame dimensions are too large");
+          }
           const imageData = new Uint8ClampedArray(
             data.buffer,
             data.byteOffset,
             data.byteLength,
           );
           const result = jsQR(imageData, width, height);
+
+          invalidFrameCount = 0;
 
           if (result && !doneRef.current) {
             doneRef.current = true;
@@ -116,7 +134,11 @@ export default function Command() {
             return;
           }
         } catch {
-          // Corrupted frame — skip
+          invalidFrameCount++;
+          if (invalidFrameCount >= MAX_CONSECUTIVE_INVALID_FRAMES) {
+            failCapture("Camera helper produced too many invalid frames.");
+            return;
+          }
         }
 
         processing = false;

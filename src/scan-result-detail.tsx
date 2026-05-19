@@ -23,14 +23,19 @@ export function ScanResultDetail({ data }: { data: string }) {
 
   const wifi = parseWifi(data);
   const isUrl = looksLikeUrl(data);
+  const canConnectToWifi = wifi ? canConnect(wifi) : false;
 
   return (
     <Detail
-      markdown={buildMarkdown(data, wifi, isUrl)}
-      metadata={wifi ? buildWifiMetadata(wifi, showPassword) : undefined}
+      markdown={buildMarkdown(data, wifi, isUrl, canConnectToWifi)}
+      metadata={
+        wifi
+          ? buildWifiMetadata(wifi, showPassword, canConnectToWifi)
+          : undefined
+      }
       actions={
         <ActionPanel>
-          {wifi && (
+          {wifi && canConnectToWifi && (
             <Action
               title="Connect to Network"
               icon={Icon.Wifi}
@@ -102,7 +107,19 @@ export function ScanResultDetail({ data }: { data: string }) {
   );
 }
 
-function buildWifiMetadata(wifi: WifiNetwork, showPassword: boolean) {
+function canConnect(wifi: WifiNetwork): boolean {
+  return wifi.security.toLowerCase() === "nopass" || wifi.password.length > 0;
+}
+
+function escapeMarkdown(value: string): string {
+  return value.replace(/[\\`*_{}[\]()#+\-.!|>]/g, "\\$&").replace(/\n/g, "\\n");
+}
+
+function buildWifiMetadata(
+  wifi: WifiNetwork,
+  showPassword: boolean,
+  canConnectToWifi: boolean,
+) {
   return (
     <Detail.Metadata>
       <Detail.Metadata.Label title="Network" text={wifi.ssid} />
@@ -120,7 +137,9 @@ function buildWifiMetadata(wifi: WifiNetwork, showPassword: boolean) {
       {wifi.hidden ? <Detail.Metadata.Label title="Hidden" text="Yes" /> : null}
       <Detail.Metadata.Separator />
       <Detail.Metadata.TagList title="Actions">
-        <Detail.Metadata.TagList.Item text="↵ Connect" color={Color.Green} />
+        {canConnectToWifi ? (
+          <Detail.Metadata.TagList.Item text="↵ Connect" color={Color.Green} />
+        ) : null}
         <Detail.Metadata.TagList.Item
           text="⌘⇧P Display Password"
           color={Color.Orange}
@@ -144,20 +163,26 @@ function buildMarkdown(
   decoded: string,
   wifi: WifiNetwork | null,
   isUrl: boolean,
+  canConnectToWifi: boolean,
 ): string {
   if (wifi) {
+    const network = escapeMarkdown(wifi.ssid);
     return [
       `**Wi-Fi Network Found**`,
       ``,
-      `Press \`↵\` to connect to **${wifi.ssid}**.`,
+      canConnectToWifi
+        ? `Press \`↵\` to connect to **${network}**.`
+        : `**${network}** is saved without a password. Copy the network name and join manually if needed.`,
     ].join("\n");
   }
+
+  const safeDecoded = escapeMarkdown(decoded);
 
   if (isUrl) {
     return [
       `**QR Code Found!**`,
       ``,
-      `\`${decoded}\``,
+      `\`${safeDecoded}\``,
       ``,
       `---`,
       ``,
@@ -168,7 +193,7 @@ function buildMarkdown(
   return [
     `**QR Code Found!**`,
     ``,
-    `\`${decoded}\``,
+    `\`${safeDecoded}\``,
     ``,
     `---`,
     ``,

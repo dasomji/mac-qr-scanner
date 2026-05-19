@@ -26,9 +26,19 @@ export default function ScanHistory() {
 
   const loadHistory = useCallback(async () => {
     setIsLoading(true);
-    const entries = await getHistory();
-    setHistory(entries);
-    setIsLoading(false);
+    try {
+      const entries = await getHistory();
+      setHistory(entries);
+    } catch (error) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Could Not Load History",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      setHistory([]);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -36,9 +46,17 @@ export default function ScanHistory() {
   }, [loadHistory]);
 
   async function handleDelete(id: string) {
-    await deleteFromHistory(id);
-    await loadHistory();
-    await showToast({ style: Toast.Style.Success, title: "Deleted" });
+    try {
+      await deleteFromHistory(id);
+      await loadHistory();
+      await showToast({ style: Toast.Style.Success, title: "Deleted" });
+    } catch (error) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Could Not Delete",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   async function handleClearAll() {
@@ -52,9 +70,17 @@ export default function ScanHistory() {
         },
       })
     ) {
-      await clearHistory();
-      await loadHistory();
-      await showHUD("History cleared");
+      try {
+        await clearHistory();
+        await loadHistory();
+        await showHUD("History cleared");
+      } catch (error) {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Could Not Clear History",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 

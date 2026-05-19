@@ -14,6 +14,7 @@ class FrameStreamer: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private let context = CIContext()
     private let interval: TimeInterval
     private var lastCaptureTime: CFAbsoluteTime = 0
+    private var observers: [NSObjectProtocol] = []
 
     init(interval: TimeInterval = 0.3) {
         self.interval = interval
@@ -49,12 +50,38 @@ class FrameStreamer: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             exit(1)
         }
         session.addOutput(output)
+        observeSessionFailures()
 
         session.startRunning()
     }
 
     func stop() {
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers.removeAll()
         session.stopRunning()
+    }
+
+    private func observeSessionFailures() {
+        let center = NotificationCenter.default
+
+        observers.append(center.addObserver(
+            forName: .AVCaptureSessionRuntimeError,
+            object: session,
+            queue: .main
+        ) { notification in
+            let error = notification.userInfo?[AVCaptureSessionErrorKey] as? NSError
+            fputs("Camera runtime error: \(error?.localizedDescription ?? "unknown error")\n", stderr)
+            exit(1)
+        })
+
+        observers.append(center.addObserver(
+            forName: .AVCaptureSessionWasInterrupted,
+            object: session,
+            queue: .main
+        ) { _ in
+            fputs("Camera capture interrupted.\n", stderr)
+            exit(1)
+        })
     }
 
     func captureOutput(
